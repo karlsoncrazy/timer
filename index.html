@@ -348,6 +348,7 @@
     var canvas = document.getElementById('fireCanvas');
     if(!canvas) return;
     var ctx = canvas.getContext('2d');
+    if(!ctx) return;
     var panel = document.querySelector('.content-panel');
     var particles = [];
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -355,14 +356,21 @@
 
     function resize(){
       var rect = panel.getBoundingClientRect();
-      canvas.width = Math.max(1, rect.width * dpr);
-      canvas.height = Math.max(1, rect.height * dpr);
+      if(rect.width < 1 || rect.height < 1) return;
+      canvas.width = Math.max(1, Math.round(rect.width * dpr));
+      canvas.height = Math.max(1, Math.round(rect.height * dpr));
       canvas.style.width = rect.width + 'px';
       canvas.style.height = rect.height + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
     window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', resize);
+    window.addEventListener('load', resize);
     resize();
+    // iOS Safari can report a stale/zero rect on first paint (fonts, dvh units
+    // settling) — re-measure a couple of times shortly after load as a safety net.
+    setTimeout(resize, 150);
+    setTimeout(resize, 600);
 
     function spawn(w, h){
       particles.push({
@@ -379,14 +387,20 @@
     }
 
     var lastSpawn = 0;
-    var maxParticles = 42;
+    var maxParticles = reduceMotion ? 14 : 42;
+    var spawnInterval = reduceMotion ? 320 : 130;
+    var speedFactor = reduceMotion ? 0.5 : 1;
 
     function loop(ts){
       var w = canvas.width / dpr;
       var h = canvas.height / dpr;
+      if(w < 1 || h < 1){
+        requestAnimationFrame(loop);
+        return;
+      }
       ctx.clearRect(0, 0, w, h);
 
-      if(ts - lastSpawn > 130 && particles.length < maxParticles){
+      if(ts - lastSpawn > spawnInterval && particles.length < maxParticles){
         spawn(w, h);
         lastSpawn = ts;
       }
@@ -394,8 +408,8 @@
       for(var i = particles.length - 1; i >= 0; i--){
         var p = particles[i];
         p.life++;
-        p.y -= p.speed;
-        p.x += p.drift + Math.sin(p.life * 0.05 + p.flicker) * 0.35;
+        p.y -= p.speed * speedFactor;
+        p.x += (p.drift + Math.sin(p.life * 0.05 + p.flicker) * 0.35) * speedFactor;
 
         var t = p.life / p.maxLife;
         var alpha = t < 0.15 ? t / 0.15 : (1 - (t - 0.15) / 0.85);
@@ -422,9 +436,7 @@
       requestAnimationFrame(loop);
     }
 
-    if(!reduceMotion){
-      requestAnimationFrame(loop);
-    }
+    requestAnimationFrame(loop);
   })();
 </script>
 
